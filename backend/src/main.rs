@@ -2,49 +2,51 @@
 // Little TCP Rust Server for learning
 // Comments are for future Henry
 
-use std::{
-    io::{BufReader, prelude::*},
-    net::{TcpListener, TcpStream},
-};
+// HTTP routing and requests library
+// routing::get routes get requests
+// to a specified handler.
+// Json is for JSON stuff, go figure
+// Router is the type for routing
+use axum::{routing::get, Json, Router};
 
-fn main() {
-    // Bind does normal bind things, unwrap()
-    // returns a Result enum which is similar
-    // to Haskell's Maybe type. Which is pretty cool.
-    let listener = TcpListener::bind("127.0.0.1:8888").unwrap();
-    println!("Server waiting for connections...");
+// serialization of data structures
+// used for JSON in this instance
+use serde::Serialize;
 
-    // starts an infinite iterator that continuously accepts
-    // connections.
-    for stream in listener.incoming() {
-        match stream {
-            Ok(tcp_stream) => {
-                println!("New connection!");
-                handle_connection(tcp_stream);
-            }
-            Err(e) => {
-                println!("Connection failed!");
-                println!("{}", e);
-            }
-        }
-    }
+// I have now learned that Cross-Origin
+// Resource Sharing is a thing and this
+// crate allows you to do it.
+use tower_http::cors::{Any, CorsLayer};
+
+#[derive(Serialize)]
+struct MessageResponse {
+    message: String,
 }
 
-fn handle_connection(mut stream: TcpStream) {
-    // Creates a buffer reader with the tcp stream
-    let buf_reader = BufReader::new(&stream);
-    // Put lines of request from browser into a vector
-    let http_request: Vec<_> = buf_reader
-        // lines() creates an iterator of Result - splits data based on newlines
-        .lines()
-        // Get each line by mapping and unwrapping each Result
-        .map(|result| result.unwrap())
-        // Keep taking lines until double newline is found (aka empty string)
-        .take_while(|line| !line.is_empty())
-        // collect() collects. Iterators are lazy and need a terminator
-        .collect();
+// tokio lets me define a main function
+// as asynchronous with this macro.
+#[tokio::main]
+async fn main() {
+    // Need cors for letting Vue running on
+    // a different port access data sent from this server
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any);
 
-    let response = "HTTP/1.1 200 OK\r\n\r\n";
+    // Defining an API route using Router
+    let app = Router::new()
+        .route("/api/home", get(get_home))
+        .layer(cors);
 
-    stream.write_all(response.as_bytes()).unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await.unwrap();
+    println!("Server listening...");
+
+    axum::serve(listener, app).await.unwrap();
+}
+
+async fn get_home() -> Json<MessageResponse> {
+    let response = MessageResponse {
+        message: String::from("No way."),
+    };
+    Json(response)
 }
